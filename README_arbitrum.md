@@ -46,7 +46,7 @@ The bot is built with TypeScript, express.js, viem, integrating several key tech
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone git@github.com:Xtreamly-Team/xtr_eliza_arbitrum_demo.git
    cd xtr_defi_backend
    ```
 
@@ -125,6 +125,12 @@ pnmp start:xtr
     "classification_description": "ETH price in highly volatile short momentum, requiring protective measures and caution."
   }
   ```
+
+  ### Example On-chain Transactions Bundle
+https://arbiscan.io/tx/0x5e995b72ce36098c85107afcd250d26d2baf5a448c8b973a6bdab53c8f2708f7
+
+https://arbiscan.io/tx/0xb8cda940b8637c8eb6edc12db02b7ce562de8748a4261e047f7132cdae46ef2c
+
 
 ## Architecture and Overview
 ```mermaid
