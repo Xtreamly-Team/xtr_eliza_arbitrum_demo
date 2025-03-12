@@ -2,7 +2,6 @@ import dotenv from 'dotenv';
 dotenv.config(); // Load .env
 
 import app from './app';
-import { startCronJob, stopCronJob } from './cron/job';
 import logger from './utils/logger';
 import { cleanEnv, str } from 'envalid';
 
@@ -19,14 +18,14 @@ const PORT = env.PORT;
 const server = app.listen(PORT, () => {
 	logger.info(`Server is running on port ${PORT}`);
 	// Start cron job after server is up
-	const cronTask = startCronJob();
+	// const cronTask = startCronJob();
 
 	// Handle graceful shutdown
 	const gracefulShutdown = () => {
 		logger.info('Received shutdown signal. Shutting down gracefully...');
 
 		// Stop the cron job
-		stopCronJob(cronTask);
+		// stopCronJob(cronTask);
 
 		// Close the server
 		server.close(() => {

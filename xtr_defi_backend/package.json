@@ -20,7 +20,10 @@
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
+		"@types/cors": "^2.8.17",
+		"cors": "^2.8.5",
 		"dotenv": "^16.4.7",
+		"firebase-admin": "^13.1.0",
 		"xtreamly_trader": "github:Xtreamly-Team/xtreamly-trader"
 	},
 	"devDependencies": {

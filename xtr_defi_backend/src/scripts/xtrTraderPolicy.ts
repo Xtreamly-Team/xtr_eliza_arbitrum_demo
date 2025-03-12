@@ -5,6 +5,7 @@ import { TransactionParams } from '../types/TransactionTypes';
 import { getFullAavePositionData, getTokenEOABalances } from './aaveV3Position';
 import { leverageLoopUSDC_ETH } from './bundleLev_USDC_ETH';
 import { deleverageLoopUSDC_ETH } from './bundleDeLev_USDC_ETH';
+import {pushMessage} from "../utils/ui_pusher";
 
 // Function to create a delay
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -14,7 +15,27 @@ const determineAmount = (prediction: number): string => {
 	return scaledAmount;
 };
 
-export async function handleApiResponse(data: any): Promise<void> {
+async function talkToEliza(promptData: any) {
+	const text = JSON.stringify(promptData, null, 2);
+
+	const response = await fetch('http://localhost:3000/Eliza/message', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({
+			// text: 'should I increase or decrease my leverage? My collateral is 0.0814752 ETH and 20 USDC and borrow is 0,0000002 eth and 85.63 USDC and my health factor is at 2.37. should I buy more usdc, borrow more eth, repay eth or perform another action. Whatever action you recommend always define the action and amount in your response . marketData: predicted_at: 1738320856264, predicted_at_utc: 2025-01-31T10:54:16.264362+00:00,market_status: lowvol, market_status_description: ETH price in low price fluctuations enabling to take more risk.',
+			text,
+			userId: 'user',
+			userName: 'User',
+		}),
+	});
+	const data = await response.json();
+	await delay(15000);
+	return data
+}
+
+export async function handleApiResponse(data: any, chatId: string): Promise<void> {
 	// Safely access nested properties with type checking
 
 
@@ -33,10 +54,30 @@ export async function handleApiResponse(data: any): Promise<void> {
 	// fetch user aave v3 position data
 
 	const userAddress = '0xf2873f92324e8ec98a82c47afa0e728bd8e41665';
+	await pushMessage(chatId, "loop", "Checking your current AAVE V3 Positions, for wallet" + userAddress)
 
 	const aavePositionData = await getFullAavePositionData(userAddress);
 	logger.info('Received aave v3 position data');
 	console.log(aavePositionData);
+	
+	const ltv = aavePositionData.positionAnalysis.currentLTV * 100;
+	await pushMessage(chatId, "loop", `
+	Current AAVE Position Analysis:
+	
+	1. Current Loan-to-Value (LTV): ${ltv.toFixed(2)}% (Indicates that ${ltv.toFixed(2)}% of the collateral's value is being used as a loan)
+	2. Risk Level: ${aavePositionData.positionAnalysis.riskLevel}
+	3. Health Factor: ${aavePositionData.positionAnalysis.healthFactor.toFixed(2)} (A measure of how safe the position is; the higher, the safer)
+	
+	USDC (USD Coin) Data:
+	
+	1. Supplied: ${aavePositionData.usdcData.balances.supplied.toFixed(2)} USDC
+	2. Supply APY (Annual Percentage Yield): ${(aavePositionData.usdcData.balances.supplied * 100).toFixed(4)}% (Interest earned on supplied USDC)
+	
+	WETH (Wrapped Ethereum) Data:
+	
+	1. Supplied: ${aavePositionData.wethData.balances.supplied.toFixed(2)} WETH
+	2. Supply APY (Annual Percentage Yield): ${(aavePositionData.wethData.balances.supplied * 100).toFixed(4)}% (Interest earned on supplied WETH)
+	`)
 
 	let depositAmount = '400000';
 	let borrowAmount = '100000000000000';
@@ -44,17 +85,25 @@ export async function handleApiResponse(data: any): Promise<void> {
 
 	// Get token balances
 	const tokenBalances = await getTokenEOABalances(userAddress);
-	console.log('Token balances:', {
+	const balances = {
 		USDC: tokenBalances.usdc.displayString,
 		WETH: tokenBalances.weth.displayString
-	});
+	};
+	console.log('Token balances:', balances);
+	await pushMessage(chatId, "loop", `
+	You current token balances:
+	
+	1. USDC: ${balances.USDC}
+	2. WETH: ${balances.WETH}
+	`)
 
 	// Simple threshold condition
 	// Make request to Eliza API
 	logger.info('Populating xtr_eliza with prompt');
 
+	const question = 'Should I increase or decrease my leverage or maintain my current position?'
 	const promptData = {
-		question: 'Should I increase or decrease my leverage or maintain my current position?',
+		question,
 		currentPosition: {
 			data: aavePositionData,
 			EOAAvailableTokenBalances: {
@@ -85,28 +134,13 @@ export async function handleApiResponse(data: any): Promise<void> {
 		]
 	};
 
-	let prompt = JSON.stringify(promptData, null, 2);
 
 	logger.info('Prompt for Eliza:');
-	console.log(JSON.stringify(JSON.parse(prompt), null, 2));
+	console.log(JSON.stringify(promptData, null, 2));
+	await pushMessage(chatId, "loop", `Hey Eliza, ${question}`)
 
 	try {
-		const response = await fetch('http://localhost:3000/Eliza/message', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				// text: 'should I increase or decrease my leverage? My collateral is 0.0814752 ETH and 20 USDC and borrow is 0,0000002 eth and 85.63 USDC and my health factor is at 2.37. should I buy more usdc, borrow more eth, repay eth or perform another action. Whatever action you recommend always define the action and amount in your response . marketData: predicted_at: 1738320856264, predicted_at_utc: 2025-01-31T10:54:16.264362+00:00,market_status: lowvol, market_status_description: ETH price in low price fluctuations enabling to take more risk.',
-				text: prompt,
-				userId: 'user',
-				userName: 'User',
-			}),
-		});
-		const data = await response.json();
-		console.log(data);
-		await delay(15000); // 20 seconds delay
-		// Extract action and amount from response
+		const data = await talkToEliza(promptData);
 
 		// Access the first element of the array
 		const elizaResponse = data[0]; // Assuming the response is an array
@@ -118,12 +152,16 @@ export async function handleApiResponse(data: any): Promise<void> {
 			action: elizaAction,
 			amount: elizaAmount,
 		});
+		elizaResponse.text && await pushMessage(chatId, "eliza", elizaResponse.text)
+		await pushMessage(chatId, "eliza", `You should ${elizaAction} ${elizaAmount}.`)
+
 
 		// Check if elizaAmount is valid
 		// if (typeof elizaAmount !== 'number') {
 		// 	logger.error('Invalid elizaAmount received:', elizaAmount);
 		// 	return; // Exit if elizaAmount is not valid
 		// }
+		await pushMessage(chatId, "loop", `Perfect I will ${elizaAction} ${elizaAmount}.`)
 
 		// leverageLoopUSDC_ETH(depositAmount, borrowAmount);
 
@@ -170,6 +208,7 @@ export async function handleApiResponse(data: any): Promise<void> {
 		// 	return;
 		// }
 	} catch (error: any) {
+		await pushMessage(chatId, "loop", 'I am having trouble talking to Eliza at this moment.')
 		logger.error('Error calling Eliza API:', {
 			error: error.message,
 			stack: error.stack,
